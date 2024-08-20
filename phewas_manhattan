@@ -1,0 +1,126 @@
+rm(list = ls())
+require(data.table)
+require(gridExtra)
+###########
+require(ggplot2)
+require(ggrepel)
+require(magrittr)
+require(dplyr)
+setwd("~/Dropbox/k99_prep/KJ_K99_2024/trs_pilot/")
+
+###### use 'Phecodes Definition 1.2' downloaded from this page https://phewascatalog.org/phecodes_icd10cm 5OCT2022
+phecodemap<-fread("~/Dropbox/MCP_spredixcan/grex_phewas/MCP_spredixcan_phewas/phecode_definitions1.2.csv")
+summary(as.factor(phecodemap$category))
+
+i1<-list.files()[grep("trs_phewas.RData",list.files())]
+
+rm(i)
+plot_list<-list()
+for(i in 1:length(i1)){
+load(i1[i])
+
+title1<-unlist(strsplit(i1[i],"_phewas.RData"))
+
+#> head(results)
+#  phenotype                 snp adjustment         beta          SE        OR         p     type n_total n_cases n_controls HWE_p
+#1       008 `0.01_BasoAmyg_trs`       <NA>  0.008678927 0.009444391 1.0087167 0.3581215 logistic   14649     121      14528    NA
+#2     008.5 `0.01_BasoAmyg_trs`       <NA>  0.015340880 0.010996145 1.0154592 0.1629814 logistic   14617      89      14528    NA
+#3    008.51   0.01_BasoAmyg_trs       <NA>           NA          NA        NA        NA logistic   14531       3      14528    NA
+#4    008.52 `0.01_BasoAmyg_trs`       <NA> -0.020447547 0.030149970 0.9797601 0.4976483 logistic   14540      12      14528    NA
+#5     008.6 `0.01_BasoAmyg_trs`       <NA> -0.007059286 0.020710265 0.9929656 0.7332095 logistic   14553      25      14528    NA
+#6     008.7   0.01_BasoAmyg_trs       <NA>           NA          NA        NA        NA logistic   14533       5      14528    NA
+#  allele_freq n_no_snp                                                                                                       note
+#1    3.812745        0                                   [Warning: Genotype is not coded 0,1,2, but additive.genotypes was TRUE.]
+#2    3.813729        0                                   [Warning: Genotype is not coded 0,1,2, but additive.genotypes was TRUE.]
+#3    3.810138        0  [Warning: Genotype is not coded 0,1,2, but additive.genotypes was TRUE.] [Error: < 10  cases or controls]
+#4    3.808612        0                                   [Warning: Genotype is not coded 0,1,2, but additive.genotypes was TRUE.]
+#5    3.808783        0                                   [Warning: Genotype is not coded 0,1,2, but additive.genotypes was TRUE.]
+#6    3.808274        0  [Warning: Genotype is not coded 0,1,2, but additive.genotypes was TRUE.] [Error: < 10  cases or controls]
+#  bonferroni   fdr
+#1      FALSE FALSE
+#2      FALSE FALSE
+#3         NA    NA
+#4      FALSE FALSE
+#5      FALSE FALSE
+#6         NA    NA
+
+results$phecode<-as.numeric(results$phenotype)
+
+
+dat<-merge(results,phecodemap,by="phecode")
+dat_all<-dat[is.na(dat$beta)==F,]
+dat_all$category[which(dat_all$category=="NULL")]<-"other"
+
+
+
+
+
+dat_all2<-dat_all[order(dat_all$category),]
+dat_all2$p_fdr<-p.adjust(dat_all2$p,method = "fdr")
+
+dat_all2$logp<-log10(dat_all2$p)*-1
+#dat_all2$logp<-log10(dat_all2$p_fdr)*-1
+dat_all2$Z<-dat_all2$beta/dat_all2$SE
+
+dat_plot<-dat_all2
+dat_plot$label<-rep("",length(dat_plot$phecode))
+p1<--log10(0.01)
+dat_plot$label[which(dat_plot$logp>p1)]<-dat_all2$phenotype.y[which(dat_plot$logp>p1)] 
+
+# for general idea https://rpubs.com/helloyjjoo/pheWAS_connectome 
+
+
+
+if(title1!="MedialAmyg_trs"){ # i want a legend only on 1 of my pheWAS manhattans rather than all of them
+
+
+p<-ggplot(dat_plot, aes(x=phecode, y=logp)) + 
+  geom_point(aes(col=category, size=Z)) + 
+  theme_classic() + 
+  theme(axis.text.x = element_blank(), axis.ticks=element_blank(), legend.position = "none") + 
+  labs(color="Category", size="Effect size", x="imTRS-Phecode Association", y="-log10(p)") +
+  geom_hline(yintercept=p1, color="red", size=1, alpha=0.5) +
+  ylim(0,4) +
+  ggtitle(title1) + 
+  geom_text_repel(data=filter(dat_plot, dat_plot$logp>p1), size = 8 / .pt,box.padding = 0.5,aes(label=label, size= 5 /.pt),
+                 max.overlaps=Inf)
+
+plot_list[[i]]<-p
+rm(p)
+}
+
+
+if(title1=="MedialAmyg_trs"){
+  
+  
+  p<-ggplot(dat_plot, aes(x=phecode, y=logp)) + 
+    geom_point(aes(col=category, size=Z)) + 
+    theme_classic() + 
+    theme(axis.text.x = element_blank(), axis.ticks=element_blank()) + 
+    labs(color="Category", size="Effect size", x="imTRS-Phecode Association", y="-log10(p)") +
+    geom_hline(yintercept=p1, color="red", size=1, alpha=0.5) +
+    ylim(0,4) +
+    ggtitle(title1) + 
+    geom_text_repel(data=filter(dat_plot, dat_plot$logp>p1), size = 8 / .pt,box.padding = 0.5,aes(label=label, size= 5 /.pt),
+                    max.overlaps=Inf)
+  
+  plot_list[[i]]<-p
+  rm(p)
+}
+
+
+
+
+}
+
+g1<-plot_list[[1]]
+g2<-plot_list[[2]]
+g3<-plot_list[[3]]
+
+
+tiff("trs_phewas.tiff", units="in", width=20, height=15, res=300)
+grid.arrange(g1,g2,g3,
+             
+             nrow=2)
+dev.off()
+#
